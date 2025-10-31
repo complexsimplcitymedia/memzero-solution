@@ -37,13 +37,14 @@ class MemorySearch:
     def search_memory(self, user_id, query, max_retries=3, retry_delay=1):
         start_time = time.time()
         retries = 0
+        filters={"OR": [{"user_id": user_id}]}
         while retries < max_retries:
             try:
                 if self.is_graph:
                     print("Searching with graph")
                     memories = self.mem0_client.search(
                         query,
-                        user_id=user_id,
+                        filters=filters,
                         top_k=self.top_k,
                         filter_memories=self.filter_memories,
                         enable_graph=True,
@@ -51,7 +52,7 @@ class MemorySearch:
                     )
                 else:
                     memories = self.mem0_client.search(
-                        query, user_id=user_id, top_k=self.top_k, filter_memories=self.filter_memories
+                        query, filters=filters, top_k=self.top_k, filter_memories=self.filter_memories
                     )
                 break
             except Exception as e:
@@ -62,25 +63,17 @@ class MemorySearch:
                 time.sleep(retry_delay)
 
         end_time = time.time()
+        semantic_memories = [
+            {
+                "memory": memory["memory"],
+                "timestamp": memory["metadata"]["timestamp"],
+                "score": round(memory["score"], 2),
+            }
+            for memory in memories["results"]
+        ]
         if not self.is_graph:
-            semantic_memories = [
-                {
-                    "memory": memory["memory"],
-                    "timestamp": memory["metadata"]["timestamp"],
-                    "score": round(memory["score"], 2),
-                }
-                for memory in memories
-            ]
             graph_memories = None
         else:
-            semantic_memories = [
-                {
-                    "memory": memory["memory"],
-                    "timestamp": memory["metadata"]["timestamp"],
-                    "score": round(memory["score"], 2),
-                }
-                for memory in memories["results"]
-            ]
             graph_memories = [
                 {"source": relation["source"], "relationship": relation["relationship"], "target": relation["target"]}
                 for relation in memories["relations"]
@@ -163,6 +156,7 @@ class MemorySearch:
         }
 
         # Save results after each question is processed
+        os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
         with open(self.output_path, "w") as f:
             json.dump(self.results, f, indent=4)
 
